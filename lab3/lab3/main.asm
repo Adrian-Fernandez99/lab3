@@ -25,6 +25,10 @@ Descripción:
 .org		OVF0addr
 	JMP		OVERFLOW
 
+
+TABLA7SEG: .DB	0x7E, 0x30, 0x6D, 0x79, 0x33, 0x5B, 0x5F, 0x70, 0x7F, 0x7B, 0x77, 0x7F, 0x4E, 0x7E, 0x4F, 0x47
+//			  1,    2,    3,    4,    5,    6,    7,    8,    9,    A,    B,    C,    D,    F,    G,    H
+
 // Configuración de la pila
 START:
 	LDI		R16, LOW(RAMEND)
@@ -62,13 +66,17 @@ SETUP:
 
 	// PORTD como entrada con pull-up habilitado
 	LDI		R16, 0x00
-	OUT		DDRD, R16		// Setear puerto D como entrada
+	OUT		DDRB, R16		// Setear puerto B como entrada
 	LDI		R16, 0xFF
-	OUT		PORTD, R16		// Habilitar pull-ups en puerto D
+	OUT		PORTB, R16		// Habilitar pull-ups en puerto B
 
 	// Configurar puerto C como una salida
 	LDI		R16, 0xFF
 	OUT		DDRC, R16		// Setear puerto C como salida
+
+	// Configurar puerto D como una salida
+	LDI		R16, 0xFF
+	OUT		DDRD, R16		// Setear puerto D como salida
 
 	// Realizar variables
 	LDI		R16, 0x00		// Registro del contador
@@ -80,6 +88,18 @@ SETUP:
 // Main loop
 MAIN_LOOP:
 	OUT		PORTC, R16		// Se loopea la salida del puerto
+	IN		R16, TIFR0		// Leer registro de interrupción de TIMER0
+	SBRS	R16, TOV0		// Salta si el bit 0 est "set" (TOV0 bit)
+	RJMP	MAIN_LOOP		// Reiniciar loop
+	SBI		TIFR0, TOV0		// Limpiar bandera de "overflow"
+	LDI		R16, 158
+	OUT		TCNT0, R16		// Volver a cargar valor inicial en TCNT0
+	INC		COUNTER
+	CPI		COUNTER, 10		// Se necesitan hacer 10 overflows para 1s
+	BRNE	MAIN_LOOP
+	CLR		COUNTER			// Se reinicia el conteo de overflows
+	CALL	SUMA			// Se llama al incremento del contador
+	OUT		PORTD, R17		// Sale la señal
 	JMP		MAIN_LOOP
 
 // NON-Interrupt subroutines
