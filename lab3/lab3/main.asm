@@ -40,6 +40,7 @@ START:
 SETUP:
 	// Desavilitamos interrupciones mientras seteamos todo
 	CLI
+	CALL	OVER
 
 	// Configurar Prescaler "Principal"
 	LDI		R16, (1 << CLKPCE)
@@ -103,6 +104,23 @@ MAIN_LOOP:
 	JMP		MAIN_LOOP
 
 // NON-Interrupt subroutines
+INIT_TMR0:
+	LDI		R16, (1 << CS00) | (1 << CS02)
+	OUT		TCCR0B, R16		// Setear prescaler del TIMER 0 a 1024
+	LDI		R16, 158
+	OUT		TCNT0, R16		// Cargar valor inicial en TCNT0
+	RET
+
+SUMA:						// Función para el incremento del primer contador
+	INC		R17				// Se incrementa el valor
+	SBRC	R17, 4			// Se observa si tiene más de 4 bits
+	LDI		R17, 0x00		// En ese caso es overflow y debe regresar a 0
+	RET
+
+OVER:
+	LDI		ZL, LOW(TABLA7SEG << 1)				// Ingresa a Z los registros de la tabla más bajos
+	LDI		ZH, HIGH(TABLA7SEG << 1)			
+	RET
 
 // Interrupt routines
 INCREMENTO:
