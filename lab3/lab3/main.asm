@@ -26,8 +26,8 @@ Descripción:
 	JMP		OVERFLOW
 
 
-TABLA7SEG: .DB	0x7E, 0x30, 0x6D, 0x79, 0x33, 0x5B, 0x5F, 0x70, 0x7F, 0x7B, 0x77, 0x7F, 0x4E, 0x7E, 0x4F, 0x47
-//			  1,    2,    3,    4,    5,    6,    7,    8,    9,    A,    B,    C,    D,    F,    G,    H
+TABLA7SEG: .DB	0x7E, 0x30, 0x6D, 0x79, 0x33, 0x5B, 0x5F, 0x70, 0x7F, 0x7B, 0x77, 0x4F, 0x4E, 0x6D, 0x4F, 0x47
+//			  1,    2,    3,    4,    5,    6,    7,    8,    9,	A,	B,	
 
 // Configuración de la pila
 START:
@@ -64,7 +64,7 @@ SETUP:
 	STS		PCICR, R16
 
 	// Interrupciones del timer
-	// Habilitamos interrupcionees para el PCIE0
+	// Habilitamos interrupcionees para el timer
 	LDI		R16, (1 << TOIE0)
 	STS		TIMSK0, R16
 
@@ -88,14 +88,16 @@ SETUP:
 	LDI		R18, 0x00		// Registro para el display
 	LDI		R19, 0x00		// Registro de overflows de timer0
 	LDI		R20, 0x00		// Registro del timer
+	LDI		R21, 0x00		// Timer interrupcion
 
 	// Activamos las interrupciones
 	SEI
 
 // Main loop
 MAIN_LOOP:
+	SEI
 	OUT		PORTC, R16		// Se loopea la salida del puerto
-	CPI		R19, 50			// Se esperan 50 overflows para hacer un segundo
+	CPI		R19, 15			// Se esperan 50 overflows para hacer un segundo
 	BRNE	MAIN_LOOP
 	CALL	SUMA
 	CLR		R19
@@ -104,8 +106,8 @@ MAIN_LOOP:
 
 // NON-Interrupt subroutines
 INIT_TMR0:
-	LDI		R16, (1 << CS02)
-	OUT		TCCR0B, R16		// Setear prescaler del TIMER 0 a 1024
+	LDI		R16, (0 << CS00) | (0 << CS01) | (1 << CS02)
+	OUT		TCCR0B, R16		// Setear prescaler del TIMER 0 a 256
 	LDI		R16, 178
 	OUT		TCNT0, R16		// Cargar valor inicial en TCNT0
 	RET
@@ -113,10 +115,11 @@ INIT_TMR0:
 SUMA:						// Función para el incremento del primer contador
 	INC		R20				// Se incrementa el valor
 	ADIW	Z, 1			// Se incrementa el valor en el puntero de la tabla
-	SBRC	R20, 4			// Se observa si tiene más de 4 bits
+	CPI		R20, 10
+	BRNE	SALTITO			// Se observa si tiene más de 4 bits
 	CALL	OVER			// En caso de overflow y debe regresar el puntero a 0
-	SBRC	R20, 4			// Se observa si tiene más de 4 bits
 	LDI		R20, 0x00		// En caso de overflow y debe regresar a 0
+	SALTITO:
 	LPM		R18, Z			// Subir valor del puntero a registro
 	RET
 
@@ -127,6 +130,7 @@ OVER:
 
 // Interrupt routines
 BOTONES:
+	CLI
 	IN		R17, PINB		// Se ingresa la configuración del PIND
 	CPI		R17, 0x1D		// Se compara para ver si el botón está presionado
 	BRNE	DECREMENTO		// Si no esta preionado termina la interrupción
@@ -144,5 +148,6 @@ BOTONES:
 	RETI					// Regreso de la interrupción
 
 OVERFLOW:
+	CLI
 	INC		R19
 	RETI
