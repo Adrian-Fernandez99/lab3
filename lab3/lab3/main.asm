@@ -48,6 +48,9 @@ SETUP:
 	LDI		R16, 0x04
 	STS		CLKPR, R16		// Configurar Prescaler a 16 F_cpu = 1MHz
 
+	// Inicializar timer0
+	CALL	INIT_TMR0
+
 	// Deshabilitar serial (esto apaga los demas LEDs del Arduino)
 	LDI		R16, 0x00
 	STS		UCSR0B, R16
@@ -82,6 +85,9 @@ SETUP:
 	// Realizar variables
 	LDI		R16, 0x00		// Registro del contador
 	LDI		R17, 0x00		// Registro de lectura de botones
+	LDI		R18, 0x00		// Registro para el display
+	LDI		R19, 0x00		// Registro de overflows de timer0
+	LDI		R20, 0x00		// Registro del timer
 
 	// Activamos las interrupciones
 	SEI
@@ -89,32 +95,29 @@ SETUP:
 // Main loop
 MAIN_LOOP:
 	OUT		PORTC, R16		// Se loopea la salida del puerto
-	IN		R16, TIFR0		// Leer registro de interrupción de TIMER0
-	SBRS	R16, TOV0		// Salta si el bit 0 est "set" (TOV0 bit)
-	RJMP	MAIN_LOOP		// Reiniciar loop
-	SBI		TIFR0, TOV0		// Limpiar bandera de "overflow"
-	LDI		R16, 158
-	OUT		TCNT0, R16		// Volver a cargar valor inicial en TCNT0
-	INC		COUNTER
-	CPI		COUNTER, 10		// Se necesitan hacer 10 overflows para 1s
+	CPI		R19, 50			// Se esperan 50 overflows para hacer un segundo
 	BRNE	MAIN_LOOP
-	CLR		COUNTER			// Se reinicia el conteo de overflows
-	CALL	SUMA			// Se llama al incremento del contador
-	OUT		PORTD, R17		// Sale la señal
+	CALL	SUMA
+	CLR		R19
+	OUT		PORTD, R18		// Sale la señal
 	JMP		MAIN_LOOP
 
 // NON-Interrupt subroutines
 INIT_TMR0:
-	LDI		R16, (1 << CS00) | (1 << CS02)
+	LDI		R16, (1 << CS02)
 	OUT		TCCR0B, R16		// Setear prescaler del TIMER 0 a 1024
-	LDI		R16, 158
+	LDI		R16, 178
 	OUT		TCNT0, R16		// Cargar valor inicial en TCNT0
 	RET
 
 SUMA:						// Función para el incremento del primer contador
-	INC		R17				// Se incrementa el valor
-	SBRC	R17, 4			// Se observa si tiene más de 4 bits
-	LDI		R17, 0x00		// En ese caso es overflow y debe regresar a 0
+	INC		R20				// Se incrementa el valor
+	ADIW	Z, 1			// Se incrementa el valor en el puntero de la tabla
+	SBRC	R20, 4			// Se observa si tiene más de 4 bits
+	CALL	OVER			// En caso de overflow y debe regresar el puntero a 0
+	SBRC	R20, 4			// Se observa si tiene más de 4 bits
+	LDI		R20, 0x00		// En caso de overflow y debe regresar a 0
+	LPM		R18, Z			// Subir valor del puntero a registro
 	RET
 
 OVER:
@@ -123,23 +126,23 @@ OVER:
 	RET
 
 // Interrupt routines
-INCREMENTO:
-	IN		R17, PIND		// Se ingresa la configuración del PIND
-	CPI		R17, 0xFB		// Se compara para ver si el botón está presionado
-	BRNE	FINAL			// Si no esta preionado termina la interrupción
+BOTONES:
+	IN		R17, PINB		// Se ingresa la configuración del PIND
+	CPI		R17, 0x1D		// Se compara para ver si el botón está presionado
+	BRNE	DECREMENTO		// Si no esta preionado termina la interrupción
 	INC		R16				// Si está presionado incrementa
 	SBRC	R16, 4			// Si genera overflow reinicia contador
 	LDI		R16, 0x00
-	FINAL:
-	RETI					// Regreso de la interrupción
-
-DECREMENTO:
-	IN		R17, PIND		// Se ingresa la configuración del PIND
-	CPI		R17, 0xF7		// Se compara para ver si el botón está presionado
-	BRNE	FINAL2			// Si no esta preionado termina la interrupción
+	JMP		FINAL			// Regreso de la interrupción
+	DECREMENTO:
+	CPI		R17, 0x1E		// Se compara para ver si el botón está presionado
+	BRNE	FINAL			// Si no esta preionado termina la interrupción
 	DEC		R16				// Si está presionado decrementa
 	SBRC	R16, 4			// Si genera underflow reinicia contador
 	LDI		R16, 0x0F
-	FINAL2: 
+	FINAL: 
 	RETI					// Regreso de la interrupción
 
+OVERFLOW:
+	INC		R19
+	RETI
